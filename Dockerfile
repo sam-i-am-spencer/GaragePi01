@@ -1,7 +1,7 @@
 # GaragePi Dockerfile for Raspberry Pi 5
 # Uses Python 3.11 slim image for smaller size
 
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Set working directory
 WORKDIR /app
