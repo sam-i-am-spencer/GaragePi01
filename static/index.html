@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>GaragePi</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 GaragePi</h1>
+            <div id="status-indicator" class="status-indicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <main>
+            <button id="trigger-btn" class="trigger-button" disabled>
+                <span class="button-icon">🚪</span>
+                <span class="button-text">Open/Close</span>
+            </button>
+
+            <div id="feedback" class="feedback hidden">
+                <span class="feedback-icon"></span>
+                <span class="feedback-text"></span>
+            </div>
+        </main>
+
+        <footer>
+            <p class="footer-text">
+                <span id="simulation-badge" class="badge hidden">Simulation Mode</span>
+                <span id="gpio-info"></span>
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

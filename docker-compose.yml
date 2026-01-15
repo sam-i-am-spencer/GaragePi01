@@ -1,0 +1,47 @@
+# GaragePi Docker Compose Configuration
+# For Raspberry Pi 5 with GPIO relay control
+
+services:
+  garagepi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garagepi
+    restart: unless-stopped
+    
+    # Port mapping - access on http://<pi-ip>:8000
+    ports:
+      - "8000:8000"
+    
+    # Environment configuration
+    env_file:
+      - .env
+    
+    # GPIO device access - required for relay control
+    # /dev/gpiochip4 is the GPIO controller on Raspberry Pi 5
+    devices:
+      - /dev/gpiochip4:/dev/gpiochip4
+    
+    # Run with limited privileges but GPIO access
+    # privileged: false is more secure than privileged: true
+    cap_add:
+      - SYS_RAWIO
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Health check (also defined in Dockerfile)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
