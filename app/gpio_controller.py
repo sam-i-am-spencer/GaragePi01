@@ -29,7 +29,8 @@ class GPIOController:
         chip_path: str = "/dev/gpiochip4",
         pin: int = 17,
         active_high: bool = True,
-        pulse_duration_ms: int = 500
+        pulse_duration_ms: int = 500,
+        door_sensor_pin: int = 27
     ):
         """
         Initialize the GPIO controller.
@@ -39,18 +40,22 @@ class GPIOController:
             pin: GPIO pin number for the relay
             active_high: True if relay activates on HIGH signal
             pulse_duration_ms: Duration of relay pulse in milliseconds
+            door_sensor_pin: GPIO pin number for the door reed sensor
         """
         self.chip_path = chip_path
         self.pin = pin
         self.active_high = active_high
         self.pulse_duration_ms = pulse_duration_ms
+        self.door_sensor_pin = door_sensor_pin
         self._request: Optional[object] = None
+        self._sensor_request: Optional[object] = None
         self._simulation_mode = not GPIO_AVAILABLE
+        self._simulation_door_state = False  # False = CLOSED in simulation
 
         if self._simulation_mode:
             logger.info("GPIO Controller running in SIMULATION mode")
         else:
-            logger.info(f"GPIO Controller initialized: chip={chip_path}, pin={pin}, active_high={active_high}")
+            logger.info(f"GPIO Controller initialized: chip={chip_path}, pin={pin}, active_high={active_high}, door_sensor_pin={door_sensor_pin}")
 
     def _get_on_value(self) -> 'Value':
         """Get the gpiod Value for turning relay ON."""
@@ -88,6 +93,62 @@ class GPIOController:
                 logger.error(f"Failed to request GPIO line: {e}")
                 return False
         return True
+
+    def _ensure_sensor_request(self) -> bool:
+        """
+        Ensure we have an active GPIO line request for the door sensor.
+        
+        Returns:
+            True if request is available, False otherwise
+        """
+        if self._simulation_mode:
+            return True
+
+        if self._sensor_request is None:
+            try:
+                self._sensor_request = gpiod.request_lines(
+                    self.chip_path,
+                    consumer="garagepi-sensor",
+                    config={
+                        self.door_sensor_pin: gpiod.LineSettings(
+                            direction=Direction.INPUT
+                        )
+                    }
+                )
+                logger.info(f"GPIO line {self.door_sensor_pin} (sensor) requested successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to request sensor GPIO line: {e}")
+                return False
+        return True
+
+    def read_door_sensor(self) -> str:
+        """
+        Read the door sensor state.
+        
+        Returns:
+            "CLOSED" if door is closed (sensor LOW), "OPEN" if door is open (sensor HIGH),
+            or "UNKNOWN" if reading fails
+        """
+        if self._simulation_mode:
+            state = "CLOSED" if not self._simulation_door_state else "OPEN"
+            logger.debug(f"[SIMULATION] Door sensor state: {state}")
+            return state
+
+        if not self._ensure_sensor_request():
+            return "UNKNOWN"
+
+        try:
+            value = self._sensor_request.get_value(self.door_sensor_pin)
+            # Reed sensor: LOW (INACTIVE) = magnet present = door CLOSED
+            # HIGH (ACTIVE) = magnet away = door OPEN
+            if value == Value.INACTIVE:
+                return "CLOSED"
+            else:
+                return "OPEN"
+        except Exception as e:
+            logger.error(f"Failed to read door sensor: {e}")
+            return "UNKNOWN"
 
     def pulse(self) -> bool:
         """
@@ -129,11 +190,20 @@ class GPIOController:
         if self._request is not None:
             try:
                 self._request.release()
-                logger.info("GPIO resources released")
+                logger.info("GPIO relay resources released")
             except Exception as e:
                 logger.error(f"Error releasing GPIO: {e}")
             finally:
                 self._request = None
+
+        if self._sensor_request is not None:
+            try:
+                self._sensor_request.release()
+                logger.info("GPIO sensor resources released")
+            except Exception as e:
+                logger.error(f"Error releasing sensor GPIO: {e}")
+            finally:
+                self._sensor_request = None
 
     def __del__(self):
         """Ensure cleanup on destruction."""
@@ -153,7 +223,8 @@ def init_controller(
     chip_path: str,
     pin: int,
     active_high: bool,
-    pulse_duration_ms: int
+    pulse_duration_ms: int,
+    door_sensor_pin: int = 27
 ) -> GPIOController:
     """
     Initialize the global GPIO controller.
@@ -163,6 +234,7 @@ def init_controller(
         pin: GPIO pin number
         active_high: True if relay activates on HIGH
         pulse_duration_ms: Pulse duration in milliseconds
+        door_sensor_pin: GPIO pin for door reed sensor
 
     Returns:
         The initialized GPIOController instance
@@ -175,6 +247,7 @@ def init_controller(
         chip_path=chip_path,
         pin=pin,
         active_high=active_high,
-        pulse_duration_ms=pulse_duration_ms
+        pulse_duration_ms=pulse_duration_ms,
+        door_sensor_pin=door_sensor_pin
     )
     return _controller

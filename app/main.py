@@ -50,7 +50,8 @@ async def lifespan(app: FastAPI):
             chip_path=settings.gpio_chip,
             pin=settings.gpio_pin,
             active_high=settings.relay_active_high,
-            pulse_duration_ms=settings.pulse_duration_ms
+            pulse_duration_ms=settings.pulse_duration_ms,
+            door_sensor_pin=settings.door_sensor_pin
         )
         logger.info("GPIO controller initialized")
     except Exception as e:

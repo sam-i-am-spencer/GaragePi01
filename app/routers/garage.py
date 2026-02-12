@@ -32,6 +32,13 @@ class StatusResponse(BaseModel):
     timestamp: str
 
 
+class DoorStatusResponse(BaseModel):
+    """Response model for door sensor status endpoint."""
+    door_state: str
+    sensor_pin: int
+    timestamp: str
+
+
 def check_rate_limit():
     """Check if enough time has passed since last trigger."""
     global _last_trigger_time
@@ -103,5 +110,29 @@ async def get_status():
         status="ready",
         simulation_mode=controller._simulation_mode,
         gpio_pin=controller.pin,
+        timestamp=datetime.now().isoformat()
+    )
+
+
+@router.get("/door-status", response_model=DoorStatusResponse)
+async def get_door_status():
+    """
+    Get the current door sensor status.
+    
+    Returns the door state (OPEN, CLOSED, or UNKNOWN) based on
+    the reed switch sensor reading.
+    """
+    controller = get_controller()
+    if controller is None:
+        raise HTTPException(
+            status_code=500,
+            detail="GPIO controller not initialized"
+        )
+    
+    door_state = controller.read_door_sensor()
+    
+    return DoorStatusResponse(
+        door_state=door_state,
+        sensor_pin=controller.door_sensor_pin,
         timestamp=datetime.now().isoformat()
     )

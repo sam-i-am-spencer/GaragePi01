@@ -16,12 +16,16 @@
     const feedbackText = feedback.querySelector('.feedback-text');
     const simulationBadge = document.getElementById('simulation-badge');
     const gpioInfo = document.getElementById('gpio-info');
+    const doorStatus = document.getElementById('door-status');
+    const doorState = doorStatus.querySelector('.door-state');
 
     // Configuration
     const API_BASE = '';  // Same origin
     const FEEDBACK_DISPLAY_TIME = 3000;  // ms
+    const DOOR_STATUS_POLL_INTERVAL = 2500;  // ms (2.5 seconds)
 
     let feedbackTimeout = null;
+    let doorStatusInterval = null;
 
     /**
      * Initialize the application
@@ -30,11 +34,59 @@
         // Check connection status
         await checkStatus();
 
+        // Check door status immediately
+        await checkDoorStatus();
+
         // Set up event listeners
         triggerBtn.addEventListener('click', handleTrigger);
 
         // Periodically check status
         setInterval(checkStatus, 30000);  // Every 30 seconds
+
+        // Periodically check door status
+        doorStatusInterval = setInterval(checkDoorStatus, DOOR_STATUS_POLL_INTERVAL);
+    }
+
+    /**
+     * Check the door sensor status and update UI
+     */
+    async function checkDoorStatus() {
+        try {
+            const response = await fetch(`${API_BASE}/api/garage/door-status`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                updateDoorStatus(data.door_state);
+            } else {
+                updateDoorStatus('UNKNOWN');
+            }
+        } catch (error) {
+            console.error('Door status check failed:', error);
+            updateDoorStatus('UNKNOWN');
+        }
+    }
+
+    /**
+     * Update the door status display
+     */
+    function updateDoorStatus(state) {
+        // Remove all state classes
+        doorStatus.classList.remove('open', 'closed', 'unknown');
+        
+        switch (state) {
+            case 'OPEN':
+                doorStatus.classList.add('open');
+                doorState.textContent = 'OPEN';
+                break;
+            case 'CLOSED':
+                doorStatus.classList.add('closed');
+                doorState.textContent = 'CLOSED';
+                break;
+            default:
+                doorStatus.classList.add('unknown');
+                doorState.textContent = 'Unknown';
+                break;
+        }
     }
 
     /**

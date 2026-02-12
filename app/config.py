@@ -24,6 +24,9 @@ class Settings:
         self.gpio_pin: int = int(os.getenv("GPIO_PIN", "17"))
         self.relay_active_high: bool = os.getenv("RELAY_ACTIVE_HIGH", "true").lower() == "true"
 
+        # Door Sensor Configuration (Reed Switch)
+        self.door_sensor_pin: int = int(os.getenv("DOOR_SENSOR_PIN", "27"))
+
         # Timing
         self.pulse_duration_ms: int = int(os.getenv("PULSE_DURATION_MS", "500"))
 

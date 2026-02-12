@@ -108,6 +108,54 @@ main {
     padding: 2rem 0;
 }
 
+/* Door Status Indicator */
+.door-status {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    border-radius: 1rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    transition: all 0.3s ease;
+    min-width: 180px;
+    justify-content: center;
+}
+
+.door-icon {
+    font-size: 2rem;
+}
+
+.door-status.closed {
+    background: rgba(78, 204, 163, 0.2);
+    border: 2px solid var(--success-color);
+    color: var(--success-color);
+}
+
+.door-status.open {
+    background: rgba(233, 69, 96, 0.2);
+    border: 2px solid var(--error-color);
+    color: var(--error-color);
+    animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.door-status.unknown {
+    background: rgba(255, 193, 7, 0.2);
+    border: 2px solid var(--warning-color);
+    color: var(--warning-color);
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(233, 69, 96, 0);
+    }
+}
+
 /* Trigger Button */
 .trigger-button {
     width: var(--button-size);
