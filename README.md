@@ -10,6 +10,7 @@ A Raspberry Pi 5 garage door controller with a mobile-friendly web interface.
 ## 📋 Features
 
 - **Mobile-Friendly Web UI** - Large button for easy garage door control from any device
+- **Door Status Display** - Real-time open/closed status via reed switch sensor
 - **REST API** - Integrate with Home Assistant, Apple Shortcuts, or custom automation
 - **Docker Deployment** - Easy setup with Docker Compose
 - **Secure** - API key authentication for external access
@@ -24,6 +25,7 @@ The web interface features a large, easy-to-tap button that works great on mobil
 
 - Raspberry Pi 5 (running Ubuntu Server or Raspberry Pi OS)
 - Relay module (configured for active HIGH)
+- Reed switch sensor (magnetic door sensor) - optional but recommended
 - Connection to your garage door opener button terminals
 
 ### Wiring
@@ -40,6 +42,17 @@ Relay Module            Garage Door Opener
 COM ────────────────────► Button Terminal 1
 NO  ────────────────────► Button Terminal 2
 ```
+
+### Door Sensor Wiring (Optional)
+
+```
+Raspberry Pi 5          Reed Switch
+─────────────────       ────────────
+GPIO27 (Pin 13) ───────► Terminal 1
+GND    (Pin 14) ───────► Terminal 2
+```
+
+> **Note:** Mount the reed switch on the garage door frame with the magnet on the door itself. When the door is closed, the magnet should be close to the sensor (circuit closed = LOW signal).
 
 > **Note:** The relay simulates pressing the wall button. When triggered, it briefly closes the circuit (500ms pulse).
 
@@ -101,6 +114,7 @@ All configuration is done through the `.env` file:
 | `GPIO_CHIP` | `/dev/gpiochip4` | GPIO chip device path (Pi 5 uses gpiochip4) |
 | `GPIO_PIN` | `17` | GPIO pin number connected to relay |
 | `RELAY_ACTIVE_HIGH` | `true` | Set to `false` if your relay activates on LOW |
+| `DOOR_SENSOR_PIN` | `27` | GPIO pin for reed switch door sensor |
 | `PULSE_DURATION_MS` | `500` | How long the relay stays on (milliseconds) |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8000` | Server port |
@@ -114,6 +128,7 @@ All configuration is done through the `.env` file:
 | `GET` | `/` | No | Web UI |
 | `GET` | `/api/health` | No | Health check |
 | `GET` | `/api/garage/status` | Yes* | Controller status |
+| `GET` | `/api/garage/door-status` | Yes* | Door sensor state (OPEN/CLOSED) |
 | `POST` | `/api/garage/trigger` | Yes* | Trigger garage door |
 
 *Authentication is automatically handled for requests from the web UI. External API calls require the `X-API-Key` header.
@@ -130,6 +145,13 @@ curl -X POST http://<pi-ip>:8000/api/garage/trigger \
 ```bash
 curl http://<pi-ip>:8000/api/garage/status \
   -H "X-API-Key: your-api-key"
+```
+
+**Check door sensor state:**
+```bash
+curl http://<pi-ip>:8000/api/garage/door-status \
+  -H "X-API-Key: your-api-key"
+# Returns: {"door_state": "OPEN" or "CLOSED", "sensor_pin": 27, "timestamp": "..."}
 ```
 
 **Apple Shortcuts Integration:**
@@ -230,7 +252,7 @@ garage_pi01/
 
 ## 🔮 Future Enhancements
 
-- [ ] Door status sensor (magnetic reed switch)
+- [x] Door status sensor (magnetic reed switch) ✅
 - [ ] Activity logging
 - [ ] Multiple door support
 - [ ] Home Assistant MQTT integration
