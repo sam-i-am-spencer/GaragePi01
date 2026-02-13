@@ -8,9 +8,8 @@ via GPIO relay on a Raspberry Pi 5.
 import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, Depends, Response
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 
 # Configure logging
@@ -195,10 +194,41 @@ async def health_check():
     return {"status": "healthy", "service": "garagepi"}
 
 
-# Serve static files
+# Static files directory
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Cache-control headers for static files
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+}
+
+
+@app.get("/static/css/{filename}")
+async def serve_css(filename: str):
+    """Serve CSS files with cache-control headers."""
+    file_path = os.path.join(static_dir, "css", filename)
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type="text/css",
+            headers=NO_CACHE_HEADERS
+        )
+    return JSONResponse(status_code=404, content={"detail": "File not found"})
+
+
+@app.get("/static/js/{filename}")
+async def serve_js(filename: str):
+    """Serve JavaScript files with cache-control headers."""
+    file_path = os.path.join(static_dir, "js", filename)
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type="application/javascript",
+            headers=NO_CACHE_HEADERS
+        )
+    return JSONResponse(status_code=404, content={"detail": "File not found"})
 
 
 @app.get("/")
@@ -208,11 +238,8 @@ async def root():
     if os.path.exists(index_path):
         return FileResponse(
             index_path,
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0"
-            }
+            media_type="text/html",
+            headers=NO_CACHE_HEADERS
         )
     return {"message": "GaragePi API", "docs": "/docs"}
 
