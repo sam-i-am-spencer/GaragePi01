@@ -8,9 +8,9 @@ via GPIO relay on a Raspberry Pi 5.
 import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.security import APIKeyHeader
 
 # Configure logging
@@ -125,6 +125,22 @@ async def verify_api_key(
         )
 
 
+# Cache control middleware - prevent browser caching of static files
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    """Add cache-control headers to prevent browser caching of static files."""
+    response = await call_next(request)
+    path = request.url.path
+    
+    # Apply no-cache headers to static files and root
+    if path == "/" or path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    
+    return response
+
+
 # Add API key verification to all routes
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
@@ -190,7 +206,14 @@ async def root():
     """Serve the web UI."""
     index_path = os.path.join(static_dir, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     return {"message": "GaragePi API", "docs": "/docs"}
 
 
