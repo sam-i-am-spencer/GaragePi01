@@ -34,7 +34,7 @@ The web interface features a large, easy-to-tap button that works great on mobil
 Raspberry Pi 5          Relay Module
 ─────────────────       ─────────────
 GPIO17 (Pin 11) ───────► IN
-3.3V   (Pin 1)  ───────► VCC
+5.0V   (Pin 2)  ───────► VCC
 GND    (Pin 6)  ───────► GND
 
 Relay Module            Garage Door Opener
