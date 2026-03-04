@@ -37,6 +37,7 @@ class GarageMQTT:
 
         self._client = None
         self._connected = False
+        self._last_state: str | None = None
 
     def start(self):
         """Connect to the MQTT broker and start the network loop."""
@@ -105,6 +106,7 @@ class GarageMQTT:
         Args:
             state: "open" or "closed"
         """
+        self._last_state = state
         if self._client is None or not self._connected:
             return
         try:
@@ -127,6 +129,10 @@ class GarageMQTT:
 
         # Mark as online
         client.publish(self.availability_topic, "online", retain=True)
+
+        # Publish last known door state (may have been set before connection was ready)
+        if self._last_state is not None:
+            client.publish(self.state_topic, self._last_state, retain=True)
 
         # Subscribe to command topic
         client.subscribe(self.command_topic)
