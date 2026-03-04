@@ -128,10 +128,6 @@ class GarageMQTT:
         # Mark as online
         client.publish(self.availability_topic, "online", retain=True)
 
-        # Publish current door state
-        state = self.controller.read_door_sensor().lower()
-        client.publish(self.state_topic, state, retain=True)
-
         # Subscribe to command topic
         client.subscribe(self.command_topic)
         logger.info(f"MQTT subscribed to {self.command_topic}")
