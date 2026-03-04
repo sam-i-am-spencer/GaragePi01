@@ -34,6 +34,14 @@ class Settings:
         self.host: str = os.getenv("HOST", "0.0.0.0")
         self.port: int = int(os.getenv("PORT", "8000"))
 
+        # MQTT (Home Assistant integration)
+        self.mqtt_host: str = os.getenv("MQTT_HOST", "localhost")
+        self.mqtt_port: int = int(os.getenv("MQTT_PORT", "1883"))
+        self.mqtt_username: str = os.getenv("MQTT_USERNAME", "")
+        self.mqtt_password: str = os.getenv("MQTT_PASSWORD", "")
+        self.mqtt_discovery_prefix: str = os.getenv("MQTT_DISCOVERY_PREFIX", "homeassistant")
+        self.mqtt_device_id: str = os.getenv("MQTT_DEVICE_ID", "garage_pi")
+
     @property
     def relay_on_value(self) -> int:
         """Return the GPIO value that turns the relay ON."""

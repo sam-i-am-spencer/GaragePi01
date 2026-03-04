@@ -1,15 +1,15 @@
 """
 GaragePi - Raspberry Pi 5 Garage Door Controller
 
-A FastAPI-based web application for controlling a garage door
-via GPIO relay on a Raspberry Pi 5.
+FastAPI application for controlling a garage door via GPIO relay,
+with Home Assistant MQTT integration.
 """
 
+import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 
 # Configure logging
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 # Import after logging is configured
 from app.gpio_controller import init_controller, get_controller
 from app.routers import garage
+from app.mqtt_client import GarageMQTT, door_monitor
 
-# API Key security
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
@@ -35,17 +35,16 @@ def get_settings():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan handler.
-    
-    Initializes GPIO on startup and cleans up on shutdown.
-    """
-    # Startup
+    """Initialize GPIO and MQTT on startup; clean up on shutdown."""
     logger.info("Starting GaragePi...")
-    
+
+    controller = None
+    mqtt_client = None
+    monitor_task = None
+
     try:
         settings = get_settings()
-        init_controller(
+        controller = init_controller(
             chip_path=settings.gpio_chip,
             pin=settings.gpio_pin,
             active_high=settings.relay_active_high,
@@ -54,16 +53,37 @@ async def lifespan(app: FastAPI):
         )
         logger.info("GPIO controller initialized")
     except Exception as e:
-        logger.error(f"Failed to initialize: {e}")
-        # Allow app to start anyway for debugging
-    
+        logger.error(f"Failed to initialize GPIO: {e}")
+        controller = get_controller()
+
+    if controller is not None:
+        try:
+            settings = get_settings()
+            mqtt_client = GarageMQTT(settings, controller)
+            mqtt_client.start()
+            monitor_task = asyncio.create_task(door_monitor(mqtt_client, controller))
+            logger.info("MQTT client and door monitor started")
+        except Exception as e:
+            logger.error(f"Failed to start MQTT: {e}")
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down GaragePi...")
-    controller = get_controller()
-    if controller:
+
+    if monitor_task is not None:
+        monitor_task.cancel()
+        try:
+            await monitor_task
+        except asyncio.CancelledError:
+            pass
+
+    if mqtt_client is not None:
+        mqtt_client.stop()
+
+    if controller is not None:
         controller.cleanup()
+
     logger.info("Cleanup complete")
 
 
@@ -71,116 +91,38 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GaragePi",
     description="Raspberry Pi 5 Garage Door Controller API",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan
 )
 
 
-async def verify_api_key(
-    request: Request,
-    api_key: str = Depends(API_KEY_HEADER)
-):
-    """
-    Verify the API key for protected endpoints.
-    
-    Allows requests from the web UI (same origin) or with valid API key.
-    """
-    # Skip auth for static files and docs
-    path = request.url.path
-    if path in ["/", "/docs", "/redoc", "/openapi.json"] or path.startswith("/static"):
-        return
-    
-    # Skip auth for health check
-    if path == "/api/health":
-        return
-    
-    # Check API key
-    try:
-        settings = get_settings()
-        if api_key and api_key == settings.api_key:
-            return
-    except Exception:
-        pass
-    
-    # Check for session cookie or referer from same origin (web UI)
-    referer = request.headers.get("referer", "")
-    origin = request.headers.get("origin", "")
-    host = request.headers.get("host", "")
-    
-    # Allow if request is from the same host (web UI)
-    if host and (host in referer or host in origin):
-        return
-    
-    # Also allow if it's a browser request with no API key header (web UI form)
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" in content_type:
-        return
-    
-    # For JSON requests, require API key
-    if "application/json" in content_type or api_key == "":
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key"
-        )
-
-
-# Cache control middleware - prevent browser caching of static files
-@app.middleware("http")
-async def cache_control_middleware(request: Request, call_next):
-    """Add cache-control headers to prevent browser caching of static files."""
-    response = await call_next(request)
-    path = request.url.path
-    
-    # Apply no-cache headers to static files and root
-    if path == "/" or path.startswith("/static"):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-    
-    return response
-
-
-# Add API key verification to all routes
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
-    """Middleware to verify API key for protected endpoints."""
+    """Require X-API-Key for all /api/ endpoints except /api/health."""
     path = request.url.path
-    
-    # Skip auth for static files, docs, health, and root
-    if (path in ["/", "/docs", "/redoc", "/openapi.json", "/api/health"] 
-        or path.startswith("/static")):
+
+    # Always allow docs and health check
+    if path in ["/docs", "/redoc", "/openapi.json", "/api/health"]:
         return await call_next(request)
-    
-    # Check API key for API endpoints
+
     if path.startswith("/api/"):
         api_key = request.headers.get("X-API-Key", "")
-        
+
         try:
             settings = get_settings()
-            valid_key = settings.api_key
+            if api_key == settings.api_key:
+                return await call_next(request)
         except Exception:
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Server configuration error"}
             )
-        
-        # Check referer/origin for web UI requests
-        referer = request.headers.get("referer", "")
-        host = request.headers.get("host", "")
-        
-        # Allow if valid API key or request from web UI
-        if api_key == valid_key:
-            return await call_next(request)
-        
-        if host and host in referer:
-            return await call_next(request)
-        
-        # Reject unauthorized requests
+
         return JSONResponse(
             status_code=401,
             content={"detail": "Invalid or missing API key. Use X-API-Key header."}
         )
-    
+
     return await call_next(request)
 
 
@@ -192,56 +134,6 @@ app.include_router(garage.router)
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "garagepi"}
-
-
-# Static files directory
-static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-
-# Cache-control headers for static files
-NO_CACHE_HEADERS = {
-    "Cache-Control": "no-cache, no-store, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0"
-}
-
-
-@app.get("/static/css/{filename}")
-async def serve_css(filename: str):
-    """Serve CSS files with cache-control headers."""
-    file_path = os.path.join(static_dir, "css", filename)
-    if os.path.exists(file_path):
-        return FileResponse(
-            file_path,
-            media_type="text/css",
-            headers=NO_CACHE_HEADERS
-        )
-    return JSONResponse(status_code=404, content={"detail": "File not found"})
-
-
-@app.get("/static/js/{filename}")
-async def serve_js(filename: str):
-    """Serve JavaScript files with cache-control headers."""
-    file_path = os.path.join(static_dir, "js", filename)
-    if os.path.exists(file_path):
-        return FileResponse(
-            file_path,
-            media_type="application/javascript",
-            headers=NO_CACHE_HEADERS
-        )
-    return JSONResponse(status_code=404, content={"detail": "File not found"})
-
-
-@app.get("/")
-async def root():
-    """Serve the web UI."""
-    index_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(
-            index_path,
-            media_type="text/html",
-            headers=NO_CACHE_HEADERS
-        )
-    return {"message": "GaragePi API", "docs": "/docs"}
 
 
 if __name__ == "__main__":

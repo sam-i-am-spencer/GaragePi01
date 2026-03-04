@@ -5,8 +5,8 @@ uvicorn[standard]==0.27.0
 # GPIO control for Raspberry Pi 5
 gpiod==2.2.0
 
+# MQTT (Home Assistant integration)
+paho-mqtt>=2.0.0
+
 # Environment variables
 python-dotenv==1.0.0
-
-# Security
-python-multipart==0.0.6
