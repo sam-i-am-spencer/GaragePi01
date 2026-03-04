@@ -1,34 +1,29 @@
-# 🏠 GaragePi
+# GaragePi
 
-A Raspberry Pi 5 garage door controller with a mobile-friendly web interface.
+A Raspberry Pi 5 garage door controller with Home Assistant integration via MQTT.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green.svg)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## 📋 Features
+## Features
 
-- **Mobile-Friendly Web UI** - Large button for easy garage door control from any device
-- **Door Status Display** - Real-time open/closed status via reed switch sensor
-- **REST API** - Integrate with Home Assistant, Apple Shortcuts, or custom automation
+- **Home Assistant Integration** - Auto-discovered via MQTT Discovery as a garage door cover entity
+- **Real-time Door State** - Reed switch sensor publishes open/closed state instantly via MQTT
+- **REST API** - Control and monitor via HTTP for scripting or other integrations
 - **Docker Deployment** - Easy setup with Docker Compose
-- **Secure** - API key authentication for external access
-- **Rate Limited** - Prevents accidental rapid triggers
+- **Secure** - API key authentication for REST endpoints
 - **Pi 5 Compatible** - Uses modern `gpiod` library for GPIO control
 
-## 🖥️ Screenshots
-
-The web interface features a large, easy-to-tap button that works great on mobile devices.
-
-## 🔧 Hardware Requirements
+## Hardware Requirements
 
 - Raspberry Pi 5 (running Ubuntu Server or Raspberry Pi OS)
 - Relay module (configured for active HIGH)
-- Reed switch sensor (magnetic door sensor) - optional but recommended
+- Reed switch sensor (magnetic door sensor)
 - Connection to your garage door opener button terminals
 
-### Wiring
+### Relay Wiring
 
 ```
 Raspberry Pi 5          Relay Module
@@ -43,7 +38,7 @@ COM ────────────────────► Button Termi
 NO  ────────────────────► Button Terminal 2
 ```
 
-### Door Sensor Wiring (Optional)
+### Door Sensor Wiring
 
 ```
 Raspberry Pi 5          Reed Switch
@@ -52,18 +47,18 @@ GPIO27 (Pin 13) ───────► Terminal 1
 GND    (Pin 14) ───────► Terminal 2
 ```
 
-> **Note:** Mount the reed switch on the garage door frame with the magnet on the door itself. When the door is closed, the magnet should be close to the sensor (circuit closed = LOW signal).
+> **Note:** Mount the reed switch on the garage door frame with the magnet on the door itself. When the door is closed, the magnet should be close to the sensor (LOW signal = closed).
 
-> **Note:** The relay simulates pressing the wall button. When triggered, it briefly closes the circuit (500ms pulse).
+> **Note:** The relay simulates pressing the wall button — it briefly closes the circuit for 500ms.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 On your Raspberry Pi 5:
-- Ubuntu Server or Raspberry Pi OS (64-bit recommended)
 - Docker and Docker Compose installed
 - Git installed
+- An MQTT broker accessible on your network (e.g. the Mosquitto add-on in Home Assistant)
 
 ### Installation
 
@@ -76,41 +71,41 @@ On your Raspberry Pi 5:
 2. **Create your environment file**
    ```bash
    cp .env.example .env
-   ```
-
-3. **Generate a secure API key and edit `.env`**
-   ```bash
-   # Generate a random API key
-   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-   
-   # Edit .env with your favorite editor
    nano .env
    ```
 
-   Update the `API_KEY` value with your generated key:
-   ```env
-   API_KEY=your-generated-key-here
-   ```
-
-4. **Start the application**
+3. **Generate a secure API key**
    ```bash
-   docker-compose up -d
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
 
-5. **Access the web interface**
-   
-   Open your browser and go to:
-   ```
-   http://<raspberry-pi-ip>:8000
+4. **Configure `.env`** with your API key and MQTT broker details (see Configuration below)
+
+5. **Start the application**
+   ```bash
+   docker compose up -d
    ```
 
-## 📖 Configuration
+6. **Check it's running**
+   ```bash
+   docker logs garagepi
+   ```
+   You should see `MQTT connected` and `MQTT subscribed to homeassistant/cover/garage_pi/set`.
+
+### Home Assistant Setup
+
+1. Install the **Mosquitto broker** add-on in Home Assistant
+2. Go to **Settings → Devices & Services → Add Integration → MQTT**
+3. Set broker to `localhost`, port `1883`, and enter your credentials
+4. The **Garage Pi** device will appear automatically under **Settings → Devices & Services → MQTT** — no manual YAML required
+
+## Configuration
 
 All configuration is done through the `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_KEY` | (required) | Secret key for API authentication |
+| `API_KEY` | (required) | Secret key for REST API authentication |
 | `GPIO_CHIP` | `/dev/gpiochip4` | GPIO chip device path (Pi 5 uses gpiochip4) |
 | `GPIO_PIN` | `17` | GPIO pin number connected to relay |
 | `RELAY_ACTIVE_HIGH` | `true` | Set to `false` if your relay activates on LOW |
@@ -118,123 +113,99 @@ All configuration is done through the `.env` file:
 | `PULSE_DURATION_MS` | `500` | How long the relay stays on (milliseconds) |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8000` | Server port |
+| `MQTT_HOST` | `localhost` | MQTT broker hostname or IP |
+| `MQTT_PORT` | `1883` | MQTT broker port |
+| `MQTT_USERNAME` | | MQTT broker username |
+| `MQTT_PASSWORD` | | MQTT broker password |
+| `MQTT_DISCOVERY_PREFIX` | `homeassistant` | HA MQTT discovery prefix |
+| `MQTT_DEVICE_ID` | `garage_pi` | Unique device ID used in MQTT topics |
 
-## 🔌 API Reference
+### MQTT Topics
 
-### Endpoints
+| Topic | Direction | Description |
+|-------|-----------|-------------|
+| `homeassistant/cover/garage_pi/config` | Published | HA MQTT Discovery config |
+| `homeassistant/cover/garage_pi/state` | Published | Door state (`open` / `closed`) |
+| `homeassistant/cover/garage_pi/availability` | Published | `online` / `offline` |
+| `homeassistant/cover/garage_pi/set` | Subscribed | Commands: `OPEN`, `CLOSE`, `STOP` |
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/` | No | Web UI |
-| `GET` | `/api/health` | No | Health check |
-| `GET` | `/api/garage/status` | Yes* | Controller status |
-| `GET` | `/api/garage/door-status` | Yes* | Door sensor state (OPEN/CLOSED) |
-| `POST` | `/api/garage/trigger` | Yes* | Trigger garage door |
+## REST API
 
-*Authentication is automatically handled for requests from the web UI. External API calls require the `X-API-Key` header.
+All endpoints except `/api/health` require the `X-API-Key` header.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/garage/status` | Controller status |
+| `GET` | `/api/garage/door-status` | Door sensor state |
+| `POST` | `/api/garage/trigger` | Trigger garage door relay |
 
 ### Examples
 
-**Trigger the garage door with curl:**
 ```bash
+# Trigger the garage door
 curl -X POST http://<pi-ip>:8000/api/garage/trigger \
   -H "X-API-Key: your-api-key"
-```
 
-**Check status:**
-```bash
-curl http://<pi-ip>:8000/api/garage/status \
-  -H "X-API-Key: your-api-key"
-```
-
-**Check door sensor state:**
-```bash
+# Check door state
 curl http://<pi-ip>:8000/api/garage/door-status \
   -H "X-API-Key: your-api-key"
-# Returns: {"door_state": "OPEN" or "CLOSED", "sensor_pin": 27, "timestamp": "..."}
 ```
 
-**Apple Shortcuts Integration:**
-1. Create a new Shortcut
-2. Add "Get Contents of URL" action
-3. Set URL to `http://<pi-ip>:8000/api/garage/trigger`
-4. Set Method to `POST`
-5. Add Header: `X-API-Key` = your API key
-
-## 🔄 Updating
-
-To update to the latest version:
+## Updating
 
 ```bash
 cd GaragePi01
 git pull
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Container won't start
-
-Check the logs:
 ```bash
-docker-compose logs -f
+docker logs garagepi
+```
+
+### MQTT not connecting
+
+Check credentials in `.env` match your broker. Watch logs for `Not authorized` errors:
+```bash
+docker logs garagepi | grep MQTT
 ```
 
 ### GPIO permission denied
-
-Ensure the GPIO device is accessible:
 ```bash
 ls -la /dev/gpiochip*
 ```
 
-If needed, add your user to the gpio group:
-```bash
-sudo usermod -aG gpio $USER
-```
-
-### Can't access web interface
-
-1. Check if container is running:
-   ```bash
-   docker-compose ps
-   ```
-
-2. Check if port is open:
-   ```bash
-   curl http://localhost:8000/api/health
-   ```
-
-3. Check firewall (if applicable):
-   ```bash
-   sudo ufw allow 8000
-   ```
-
 ### Test GPIO manually
-
-Before using the app, verify GPIO works:
 ```bash
 # Turn relay ON
 gpioset /dev/gpiochip4 17=1
 
-# Turn relay OFF  
+# Turn relay OFF
 gpioset /dev/gpiochip4 17=0
 ```
 
-## 📁 Project Structure
+### Garage Pi device not appearing in Home Assistant
+
+1. Confirm the MQTT integration is added in HA (Settings → Devices & Services → MQTT)
+2. Use the **Listen to a topic** tool in the MQTT integration config and subscribe to `homeassistant/cover/garage_pi/#` — you should see `config`, `state`, and `availability` messages
+3. Restart the container to force republishing: `docker compose restart`
+
+## Project Structure
 
 ```
-garage_pi01/
+GaragePi01/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI application
+│   ├── main.py              # FastAPI application & lifespan
 │   ├── config.py            # Configuration management
-│   ├── gpio_controller.py   # GPIO/relay control
+│   ├── gpio_controller.py   # GPIO relay & sensor control
+│   ├── mqtt_client.py       # Home Assistant MQTT integration
 │   └── routers/
-│       └── garage.py        # API endpoints
-├── static/
-│   ├── index.html           # Web UI
-│   ├── css/style.css        # Styling
-│   └── js/app.js            # Frontend logic
+│       └── garage.py        # REST API endpoints
 ├── .env.example             # Environment template
 ├── .gitignore
 ├── docker-compose.yml       # Docker orchestration
@@ -243,26 +214,18 @@ garage_pi01/
 └── README.md
 ```
 
-## 🛡️ Security Considerations
+## Security Considerations
 
 - **API Key**: Keep your API key secret. Never commit `.env` to version control.
-- **Local Network**: By default, this is designed for local network use only.
-- **HTTPS**: For remote access, consider putting this behind a reverse proxy with SSL (e.g., Nginx, Traefik, or Cloudflare Tunnel).
-- **Firewall**: Only expose port 8000 to trusted networks.
+- **Local Network**: Designed for local network use only.
+- **HTTPS**: For remote access, put this behind a reverse proxy with SSL (e.g. Nginx, Traefik, or Cloudflare Tunnel).
 
-## 🔮 Future Enhancements
-
-- [x] Door status sensor (magnetic reed switch) ✅
-- [ ] Activity logging
-- [ ] Multiple door support
-- [ ] Home Assistant MQTT integration
-- [ ] Push notifications
-
-## 📄 License
+## License
 
 MIT License - feel free to use and modify for your own projects.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
 - [gpiod](https://git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git/) - Linux GPIO library
+- [paho-mqtt](https://eclipse.dev/paho/index.php?page=clients/python/index.php) - MQTT client library
